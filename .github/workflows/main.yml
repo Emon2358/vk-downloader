@@ -1,0 +1,66 @@
+name: VK Download & Extract
+
+on:
+  workflow_dispatch:
+    inputs:
+      vk_url:
+        description: 'VK 投稿の URL'
+        required: true
+        default: 'https://vk.com/wall-60027733_55385'
+      keyword:
+        description: '.zip1 リンクに含めるキーワード'
+        required: false
+        default: ''
+      download:
+        description: '.zip1 をダウンロードするか'
+        required: false
+        default: 'true'
+        type: boolean
+      extract:
+        description: '投稿リンクを抽出してtxtに保存するか'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  vk_job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      - name: Run download & extract script
+        env:
+          VK_URL: ${{ github.event.inputs.vk_url }}
+          KEYWORD: ${{ github.event.inputs.keyword }}
+        run: |
+          python download_and_extract.py \
+            --url "$VK_URL" \
+            --keyword "$KEYWORD" \
+            $([ "${{ github.event.inputs.download }}" = "true" ] && echo "--download") \
+            $([ "${{ github.event.inputs.extract }}"  = "true" ] && echo "--extract")
+
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloads/ posts.txt || true
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "chore(vk): add downloaded .zip1 and/or extracted posts [\${{ github.run_number }}]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
