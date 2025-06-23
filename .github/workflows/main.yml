@@ -17,7 +17,7 @@ on:
         default: 'true'
         type: boolean
       extract:
-        description: '投稿リンクを抽出してtxtに保存するか'
+        description: '投稿リンクを抽出して txt に保存するか'
         required: false
         default: 'true'
         type: boolean
@@ -57,10 +57,16 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add downloads/ posts.txt || true
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "chore(vk): add downloaded .zip1 and/or extracted posts [\${{ github.run_number }}]"
-            git push
-          else
+          # 各ファイル／フォルダをステージ（存在しなくてもエラー無視）
+          git add posts.txt    || true
+          git add downloads/   || true
+
+          # ステージされた変更をチェック
+          if git diff --cached --quiet; then
             echo "No changes to commit"
+            exit 0
           fi
+
+          # 変更があればコミット＆プッシュ
+          git commit -m "chore(vk): add downloaded .zip1 and/or extracted posts [${{ github.run_number }}]"
+          git push
