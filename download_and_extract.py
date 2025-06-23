@@ -6,16 +6,18 @@ import argparse
 import requests
 from bs4 import BeautifulSoup
 
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
+     "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+
 def fetch_zip1_links(url, keyword):
     """指定URLのHTMLから、キーワードを含んだ .zip1 リンクを抽出する"""
-    resp = requests.get(url)
+    resp = requests.get(url, headers={"User-Agent": UA})
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     links = []
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if href.endswith(".zip1") and keyword in href:
-            # vk.com の相対パスを補完
             if href.startswith("/"):
                 href = "https://vk.com" + href
             links.append(href)
@@ -25,7 +27,7 @@ def download_file(url, target_dir):
     """ファイルをダウンロードして target_dir に保存する"""
     os.makedirs(target_dir, exist_ok=True)
     local_name = os.path.join(target_dir, os.path.basename(url))
-    with requests.get(url, stream=True) as r:
+    with requests.get(url, headers={"User-Agent": UA}, stream=True) as r:
         r.raise_for_status()
         with open(local_name, "wb") as f:
             for chunk in r.iter_content(chunk_size=8192):
@@ -35,20 +37,25 @@ def download_file(url, target_dir):
 
 def extract_post_links(url):
     """
-    指定URLのHTMLから、投稿リンク（/wall-..._投稿ID の形）とタイトルを抽出する
-    → title.txt に「タイトル<TAB>リンク」という形式で保存
+    モバイル版ページから /wall-xxx_yyy リンクを正規表現で抽出
+    → タイトル:URL をリストで返す
     """
-    resp = requests.get(url)
+    # モバイル版に差し替え
+    mobile_url = url.replace("vk.com", "m.vk.com")
+    resp = requests.get(mobile_url, headers={"User-Agent": UA})
     resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
+    html = resp.text
+
+    # パターンにマッチするリンクをすべて抽出
+    matches = set(re.findall(r'href="(/wall[-\d]+_\d+)"', html))
     posts = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        # 投稿リンクのパターン例: /wall-60027733_55385
-        if re.match(r"^/wall-[-\d]+_\d+$", href):
-            title = (a.get_text() or href).strip()
-            full = href if not href.startswith("/") else "https://vk.com" + href
-            posts.append((title, full))
+    for href in matches:
+        full_url = "https://vk.com" + href
+        # タイトル取得（なければURLをタイトルとして使う）
+        soup = BeautifulSoup(html, "html.parser")
+        a = soup.find("a", href=href)
+        title = (a.get_text().strip() if a and a.get_text().strip() else full_url)
+        posts.append((title, full_url))
 
     return posts
 
